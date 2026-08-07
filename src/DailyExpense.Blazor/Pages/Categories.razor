@@ -1,0 +1,308 @@
+@page "/categories"
+@using System.ComponentModel.DataAnnotations
+@using DailyExpense.Contracts.Categories
+@inject DailyExpense.Blazor.Services.DailyExpenseApiClient ApiClient
+
+<PageTitle>Categories</PageTitle>
+
+<section class="categories-page">
+    <div class="page-header">
+        <div>
+            <h1>Categories</h1>
+            <p>Manage the spending groups used by expenses and reports.</p>
+        </div>
+        <div class="toolbar">
+            <button class="primary-button" type="button" @onclick="ResetForm">New Category</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <StateMessage Message="@errorMessage" Kind="error" />
+    }
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <StateMessage Message="@statusMessage" Kind="success" />
+    }
+
+    <div class="category-workspace">
+        <section class="panel category-list-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Category List</h2>
+                    <span>@TotalLabel</span>
+                </div>
+            </div>
+
+            @if (isLoading)
+            {
+                <EmptyState Text="Loading categories..." />
+            }
+            else if (categories.Count == 0)
+            {
+                <EmptyState Text="No categories found." />
+            }
+            else
+            {
+                <div class="category-management-list">
+                    @foreach (var category in categories)
+                    {
+                        <article class="category-management-row @(editingCategoryId == category.Id ? "selected-row" : null)">
+                            <div class="category-identity">
+                                <span class="category-swatch" style="background:@GetCategoryColor(category)">@GetCategoryIcon(category)</span>
+                                <div>
+                                    <strong>@category.Name</strong>
+                                    <span>@(string.IsNullOrWhiteSpace(category.Description) ? "No description" : category.Description)</span>
+                                </div>
+                            </div>
+                            <div class="category-row-actions">
+                                @if (category.IsDefault)
+                                {
+                                    <span class="default-badge">Default</span>
+                                }
+                                <button class="icon-button" type="button" title="Edit" @onclick="() => BeginEdit(category)">E</button>
+                                <ConfirmDeleteButton Disabled="@category.IsDefault" Message="@($"Delete category '{category.Name}'?")" OnConfirmed="@(() => DeleteCategory(category))" />
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="panel category-form-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>@(editingCategoryId is null ? "Add Category" : "Edit Category")</h2>
+                    <span>@(editingCategoryId is null ? "Create a new category" : "Update the selected category")</span>
+                </div>
+            </div>
+
+            <EditForm Model="form" OnValidSubmit="SaveCategory">
+                <DataAnnotationsValidator />
+
+                <div class="form-grid">
+                    <label>
+                        Name
+                        <InputText @bind-Value="form.Name" />
+                        <ValidationMessage For="@(() => form.Name)" />
+                    </label>
+                    <label>
+                        Color
+                        <InputText type="color" @bind-Value="form.Color" />
+                        <ValidationMessage For="@(() => form.Color)" />
+                    </label>
+                    <label>
+                        Icon
+                        <InputSelect @bind-Value="form.Icon">
+                            @foreach (var icon in iconOptions)
+                            {
+                                <option value="@icon">@icon</option>
+                            }
+                        </InputSelect>
+                    </label>
+                    <label class="full-field">
+                        Description
+                        <InputTextArea @bind-Value="form.Description" rows="4" />
+                        <ValidationMessage For="@(() => form.Description)" />
+                    </label>
+                </div>
+
+                <div class="category-preview">
+                    <span class="category-swatch large" style="background:@NormalizeColor(form.Color)">@NormalizeIcon(form.Icon)</span>
+                    <div>
+                        <strong>@(string.IsNullOrWhiteSpace(form.Name) ? "Category" : form.Name)</strong>
+                        <span>@(string.IsNullOrWhiteSpace(form.Description) ? "Preview" : form.Description)</span>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button class="primary-button" type="submit" disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</button>
+                    <button class="secondary-button" type="button" @onclick="ResetForm" disabled="@isSaving">Cancel</button>
+                </div>
+            </EditForm>
+        </section>
+    </div>
+</section>
+
+@code {
+    private readonly string[] iconOptions = ["Food", "Home", "Bus", "Bag", "Heart", "Bolt", "Book", "Gift", "More"];
+
+    private IReadOnlyList<CategoryResponse> categories = [];
+    private CategoryFormModel form = CategoryFormModel.CreateDefault();
+    private Guid? editingCategoryId;
+    private string? errorMessage;
+    private string? statusMessage;
+    private bool isLoading;
+    private bool isSaving;
+
+    private string TotalLabel => categories.Count == 1
+        ? "1 category"
+        : $"{categories.Count} categories";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCategoriesAsync();
+    }
+
+    private async Task LoadCategoriesAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            categories = await ApiClient.GetCategoriesAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load categories. {ex.Message}";
+            categories = [];
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void BeginEdit(CategoryResponse category)
+    {
+        editingCategoryId = category.Id;
+        statusMessage = null;
+        errorMessage = null;
+
+        form = new CategoryFormModel
+        {
+            Name = category.Name,
+            Description = category.Description,
+            Color = NormalizeColor(category.Color),
+            Icon = NormalizeIcon(category.Icon)
+        };
+    }
+
+    private async Task SaveCategory()
+    {
+        isSaving = true;
+        errorMessage = null;
+        statusMessage = null;
+
+        try
+        {
+            if (editingCategoryId is Guid categoryId)
+            {
+                await ApiClient.UpdateCategoryAsync(categoryId, new UpdateCategoryRequest(
+                    form.Name.Trim(),
+                    NormalizeOptional(form.Description),
+                    NormalizeColor(form.Color),
+                    NormalizeIcon(form.Icon)));
+
+                statusMessage = "Category updated.";
+            }
+            else
+            {
+                await ApiClient.CreateCategoryAsync(new CreateCategoryRequest(
+                    form.Name.Trim(),
+                    NormalizeOptional(form.Description),
+                    NormalizeColor(form.Color),
+                    NormalizeIcon(form.Icon)));
+
+                statusMessage = "Category created.";
+            }
+
+            ResetForm();
+            await LoadCategoriesAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to save category. {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteCategory(CategoryResponse category)
+    {
+        if (category.IsDefault)
+        {
+            return;
+        }
+
+        errorMessage = null;
+        statusMessage = null;
+
+        try
+        {
+            await ApiClient.DeleteCategoryAsync(category.Id);
+            statusMessage = "Category deleted.";
+
+            if (editingCategoryId == category.Id)
+            {
+                ResetForm();
+            }
+
+            await LoadCategoriesAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete category. {ex.Message}";
+        }
+    }
+
+    private void ResetForm()
+    {
+        editingCategoryId = null;
+        form = CategoryFormModel.CreateDefault();
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string NormalizeColor(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "#2563eb" : value.Trim();
+    }
+
+    private static string NormalizeIcon(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "More" : value.Trim();
+    }
+
+    private static string GetCategoryColor(CategoryResponse category)
+    {
+        return NormalizeColor(category.Color);
+    }
+
+    private static string GetCategoryIcon(CategoryResponse category)
+    {
+        return NormalizeIcon(category.Icon)[0].ToString();
+    }
+
+    private sealed class CategoryFormModel
+    {
+        [Required]
+        [StringLength(80)]
+        public string Name { get; set; } = string.Empty;
+
+        [StringLength(500)]
+        public string? Description { get; set; }
+
+        [Required]
+        [RegularExpression("^#[0-9a-fA-F]{6}$")]
+        public string Color { get; set; } = "#2563eb";
+
+        public string Icon { get; set; } = "More";
+
+        public static CategoryFormModel CreateDefault()
+        {
+            return new CategoryFormModel
+            {
+                Color = "#2563eb",
+                Icon = "More"
+            };
+        }
+    }
+}

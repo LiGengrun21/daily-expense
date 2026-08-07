@@ -1,0 +1,442 @@
+@page "/expenses"
+@using System.ComponentModel.DataAnnotations
+@using DailyExpense.Contracts.Categories
+@using DailyExpense.Contracts.Common
+@using DailyExpense.Contracts.Expenses
+@inject DailyExpense.Blazor.Services.DailyExpenseApiClient ApiClient
+
+<PageTitle>Expenses</PageTitle>
+
+<section class="expenses-page">
+    <div class="page-header">
+        <div>
+            <h1>Expenses</h1>
+            <p>Track daily spending and keep the month visible.</p>
+        </div>
+        <div class="toolbar">
+            <label>
+                From
+                <input type="date" @bind="fromDate" />
+            </label>
+            <label>
+                To
+                <input type="date" @bind="toDate" />
+            </label>
+            <label>
+                Category
+                <select @bind="selectedCategoryIdText">
+                    <option value="">All</option>
+                    @foreach (var category in categories)
+                    {
+                        <option value="@category.Id">@category.Name</option>
+                    }
+                </select>
+            </label>
+            <button class="primary-button" type="button" @onclick="ApplyFilters" disabled="@isLoading">Apply</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <StateMessage Message="@errorMessage" Kind="error" />
+    }
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <StateMessage Message="@statusMessage" Kind="success" />
+    }
+
+    <div class="expense-workspace">
+        <section class="panel expense-list-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Expense List</h2>
+                    <span>@TotalLabel</span>
+                </div>
+                <button class="secondary-button" type="button" @onclick="ResetForm">New</button>
+            </div>
+
+            @if (isLoading)
+            {
+                <EmptyState Text="Loading expenses..." />
+            }
+            else if (expenses.Items.Count == 0)
+            {
+                <EmptyState Text="No expenses found." />
+            }
+            else
+            {
+                <div class="table-shell">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Title</th>
+                                <th>Category</th>
+                                <th>Method</th>
+                                <th class="amount-cell">Amount</th>
+                                <th class="action-cell">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var expense in expenses.Items)
+                            {
+                                <tr class="@(editingExpenseId == expense.Id ? "selected-row" : null)">
+                                    <td>@expense.ExpenseDate.ToString("yyyy-MM-dd")</td>
+                                    <td>
+                                        <strong>@expense.Title</strong>
+                                        @if (!string.IsNullOrWhiteSpace(expense.Description))
+                                        {
+                                            <span>@expense.Description</span>
+                                        }
+                                    </td>
+                                    <td>@expense.CategoryName</td>
+                                    <td>@FormatPaymentMethod(expense.PaymentMethod)</td>
+                                    <td class="amount-cell"><MoneyText Amount="@expense.Amount" /></td>
+                                    <td class="action-cell">
+                                        <button class="icon-button" type="button" title="Edit" @onclick="() => BeginEdit(expense)">E</button>
+                                        <ConfirmDeleteButton Message="@($"Delete expense '{expense.Title}'?")" OnConfirmed="@(() => DeleteExpense(expense))" />
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pager">
+                    <button class="secondary-button" type="button" @onclick="PreviousPage" disabled="@(page <= 1 || isLoading)">Previous</button>
+                    <span>Page @expenses.Page of @Math.Max(expenses.TotalPages, 1)</span>
+                    <button class="secondary-button" type="button" @onclick="NextPage" disabled="@(page >= expenses.TotalPages || expenses.TotalPages == 0 || isLoading)">Next</button>
+                </div>
+            }
+        </section>
+
+        <section class="panel expense-form-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>@(editingExpenseId is null ? "Add Expense" : "Edit Expense")</h2>
+                    <span>@(editingExpenseId is null ? "Create a new record" : "Update the selected record")</span>
+                </div>
+            </div>
+
+            <EditForm Model="form" OnValidSubmit="SaveExpense">
+                <DataAnnotationsValidator />
+
+                <div class="form-grid">
+                    <label>
+                        Title
+                        <InputText @bind-Value="form.Title" />
+                        <ValidationMessage For="@(() => form.Title)" />
+                    </label>
+                    <label>
+                        Amount
+                        <InputNumber @bind-Value="form.Amount" />
+                        <ValidationMessage For="@(() => form.Amount)" />
+                    </label>
+                    <label>
+                        Date
+                        <InputDate @bind-Value="form.ExpenseDate" />
+                        <ValidationMessage For="@(() => form.ExpenseDate)" />
+                    </label>
+                    <label>
+                        Category
+                        <InputSelect @bind-Value="form.CategoryId">
+                            <option value="">Select category</option>
+                            @foreach (var category in categories)
+                            {
+                                <option value="@category.Id">@category.Name</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => form.CategoryId)" />
+                    </label>
+                    <label>
+                        Payment Method
+                        <InputSelect @bind-Value="form.PaymentMethod">
+                            @foreach (var method in paymentMethods)
+                            {
+                                <option value="@method">@FormatPaymentMethod(method)</option>
+                            }
+                        </InputSelect>
+                    </label>
+                    <label class="full-field">
+                        Description
+                        <InputTextArea @bind-Value="form.Description" rows="4" />
+                    </label>
+                </div>
+
+                <div class="form-actions">
+                    <button class="primary-button" type="submit" disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</button>
+                    <button class="secondary-button" type="button" @onclick="ResetForm" disabled="@isSaving">Cancel</button>
+                </div>
+            </EditForm>
+        </section>
+    </div>
+</section>
+
+@code {
+    private readonly string[] paymentMethods =
+    [
+        "Unknown",
+        "Cash",
+        "DebitCard",
+        "CreditCard",
+        "BankTransfer",
+        "DigitalWallet"
+    ];
+
+    private IReadOnlyList<CategoryResponse> categories = [];
+    private PagedResponse<ExpenseResponse> expenses = new([], 1, 10, 0);
+    private ExpenseFormModel form = ExpenseFormModel.CreateDefault();
+    private Guid? editingExpenseId;
+    private string? selectedCategoryIdText;
+    private DateTime? fromDate;
+    private DateTime? toDate;
+    private string? errorMessage;
+    private string? statusMessage;
+    private int page = 1;
+    private const int PageSize = 10;
+    private bool isLoading;
+    private bool isSaving;
+
+    private string TotalLabel => expenses.TotalCount == 1
+        ? "1 record"
+        : $"{expenses.TotalCount} records";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCategoriesAsync();
+        await LoadExpensesAsync();
+    }
+
+    private async Task LoadCategoriesAsync()
+    {
+        try
+        {
+            categories = await ApiClient.GetCategoriesAsync();
+            if (categories.Count > 0 && form.CategoryId == Guid.Empty)
+            {
+                form.CategoryId = categories[0].Id;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load categories. {ex.Message}";
+        }
+    }
+
+    private async Task LoadExpensesAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            expenses = await ApiClient.GetExpensesAsync(
+                ToDateOnly(fromDate),
+                ToDateOnly(toDate),
+                ParseCategoryId(selectedCategoryIdText),
+                page,
+                PageSize) ?? new([], page, PageSize, 0);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load expenses. {ex.Message}";
+            expenses = new([], page, PageSize, 0);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ApplyFilters()
+    {
+        page = 1;
+        await LoadExpensesAsync();
+    }
+
+    private async Task PreviousPage()
+    {
+        if (page <= 1)
+        {
+            return;
+        }
+
+        page--;
+        await LoadExpensesAsync();
+    }
+
+    private async Task NextPage()
+    {
+        if (page >= expenses.TotalPages)
+        {
+            return;
+        }
+
+        page++;
+        await LoadExpensesAsync();
+    }
+
+    private void BeginEdit(ExpenseResponse expense)
+    {
+        editingExpenseId = expense.Id;
+        statusMessage = null;
+        errorMessage = null;
+        form = new ExpenseFormModel
+        {
+            Title = expense.Title,
+            Amount = expense.Amount,
+            ExpenseDate = expense.ExpenseDate.ToDateTime(TimeOnly.MinValue),
+            CategoryId = expense.CategoryId,
+            PaymentMethod = expense.PaymentMethod,
+            Description = expense.Description
+        };
+    }
+
+    private async Task SaveExpense()
+    {
+        if (form.CategoryId == Guid.Empty)
+        {
+            errorMessage = "Category is required.";
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = null;
+        statusMessage = null;
+
+        try
+        {
+            var expenseDate = DateOnly.FromDateTime(form.ExpenseDate);
+
+            if (editingExpenseId is Guid expenseId)
+            {
+                await ApiClient.UpdateExpenseAsync(expenseId, new UpdateExpenseRequest(
+                    form.Title.Trim(),
+                    form.Amount,
+                    expenseDate,
+                    form.CategoryId,
+                    form.PaymentMethod,
+                    NormalizeOptional(form.Description)));
+
+                statusMessage = "Expense updated.";
+            }
+            else
+            {
+                await ApiClient.CreateExpenseAsync(new CreateExpenseRequest(
+                    form.Title.Trim(),
+                    form.Amount,
+                    expenseDate,
+                    form.CategoryId,
+                    form.PaymentMethod,
+                    NormalizeOptional(form.Description)));
+
+                statusMessage = "Expense created.";
+            }
+
+            ResetForm();
+            await LoadExpensesAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to save expense. {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteExpense(ExpenseResponse expense)
+    {
+        errorMessage = null;
+        statusMessage = null;
+
+        try
+        {
+            await ApiClient.DeleteExpenseAsync(expense.Id);
+            statusMessage = "Expense deleted.";
+
+            if (editingExpenseId == expense.Id)
+            {
+                ResetForm();
+            }
+
+            if (expenses.Items.Count == 1 && page > 1)
+            {
+                page--;
+            }
+
+            await LoadExpensesAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete expense. {ex.Message}";
+        }
+    }
+
+    private void ResetForm()
+    {
+        editingExpenseId = null;
+        form = ExpenseFormModel.CreateDefault(categories.FirstOrDefault()?.Id);
+    }
+
+    private static DateOnly? ToDateOnly(DateTime? value)
+    {
+        return value is null ? null : DateOnly.FromDateTime(value.Value);
+    }
+
+    private static Guid? ParseCategoryId(string? value)
+    {
+        return Guid.TryParse(value, out var id) ? id : null;
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string FormatPaymentMethod(string? paymentMethod)
+    {
+        return paymentMethod switch
+        {
+            "DebitCard" => "Debit Card",
+            "CreditCard" => "Credit Card",
+            "BankTransfer" => "Bank Transfer",
+            "DigitalWallet" => "Digital Wallet",
+            null or "" => "Unknown",
+            _ => paymentMethod
+        };
+    }
+
+    private sealed class ExpenseFormModel
+    {
+        [Required]
+        [StringLength(120)]
+        public string Title { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Range(typeof(decimal), "0.01", "999999999")]
+        public decimal Amount { get; set; }
+
+        [Required]
+        public DateTime ExpenseDate { get; set; }
+
+        [Required]
+        public Guid CategoryId { get; set; }
+
+        public string PaymentMethod { get; set; } = "Unknown";
+
+        [StringLength(500)]
+        public string? Description { get; set; }
+
+        public static ExpenseFormModel CreateDefault(Guid? categoryId = null)
+        {
+            return new ExpenseFormModel
+            {
+                ExpenseDate = DateTime.Today,
+                CategoryId = categoryId ?? Guid.Empty,
+                PaymentMethod = "Unknown"
+            };
+        }
+    }
+}

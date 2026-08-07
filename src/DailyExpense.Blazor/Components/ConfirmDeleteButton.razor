@@ -1,0 +1,30 @@
+@inject IJSRuntime JsRuntime
+
+<button class="icon-button danger" type="button" title="@Title" disabled="@Disabled" @onclick="ConfirmAsync">@Text</button>
+
+@code {
+    [Parameter]
+    public string Message { get; set; } = "Delete this item?";
+
+    [Parameter]
+    public string Title { get; set; } = "Delete";
+
+    [Parameter]
+    public string Text { get; set; } = "D";
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    [Parameter]
+    public EventCallback OnConfirmed { get; set; }
+
+    private async Task ConfirmAsync()
+    {
+        var confirmed = await JsRuntime.InvokeAsync<bool>("confirm", Message);
+
+        if (confirmed)
+        {
+            await OnConfirmed.InvokeAsync();
+        }
+    }
+}

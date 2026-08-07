@@ -1,0 +1,268 @@
+@page "/reports"
+@using DailyExpense.Contracts.Statistics
+@using DailyExpense.Contracts.Summaries
+@inject DailyExpense.Blazor.Services.DailyExpenseApiClient ApiClient
+
+<PageTitle>Reports</PageTitle>
+
+<section class="reports-page">
+    <div class="page-header">
+        <div>
+            <h1>Reports</h1>
+            <p>Review monthly summaries, category statistics, and spending trends.</p>
+        </div>
+        <div class="toolbar">
+            <label>
+                Year
+                <input type="number" min="2000" max="2100" @bind="selectedYear" />
+            </label>
+            <label>
+                Month
+                <select @bind="selectedMonth">
+                    @for (var month = 1; month <= 12; month++)
+                    {
+                        <option value="@month">@month.ToString("00")</option>
+                    }
+                </select>
+            </label>
+            <label>
+                Trend
+                <select @bind="trendMonths">
+                    <option value="3">3 months</option>
+                    <option value="6">6 months</option>
+                    <option value="12">12 months</option>
+                </select>
+            </label>
+            <button class="primary-button" type="button" @onclick="LoadReportsAsync" disabled="@isLoading">Apply</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <StateMessage Message="@errorMessage" Kind="error" />
+    }
+
+    @if (isLoading)
+    {
+        <StateMessage Message="Loading reports..." />
+    }
+    else
+    {
+        <div class="metric-grid">
+            <MetricCard Label="Monthly Spend" Value="@CurrencyFormatter.Format(monthlySummary?.TotalExpenses ?? 0)" />
+            <MetricCard Label="Monthly Records" Value="@((monthlySummary?.ExpenseCount ?? 0).ToString())" />
+            <MetricCard Label="Yearly Spend" Value="@CurrencyFormatter.Format(yearlySummary?.TotalExpenses ?? 0)" />
+            <MetricCard Label="Budget Remaining" Value="@CurrencyFormatter.Format(monthlySummary?.RemainingBudget, "-")" IsNegative="@((monthlySummary?.RemainingBudget ?? 0) < 0)" />
+        </div>
+
+        <div class="reports-grid">
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>Category Statistics</h2>
+                        <span>@ReportRangeLabel</span>
+                    </div>
+                </div>
+                @if (categoryStatistics?.Categories.Count > 0)
+                {
+                    <div class="report-bars">
+                        @foreach (var category in categoryStatistics.Categories)
+                        {
+                            <div class="report-bar-row">
+                                <div>
+                                    <strong>@category.CategoryName</strong>
+                                    <span>@category.ExpenseCount records / @category.Percentage.ToString("0.##")%</span>
+                                </div>
+                                <div class="horizontal-bar" aria-hidden="true">
+                                    <i style="width:@ClampPercent(category.Percentage)%"></i>
+                                </div>
+                                <strong class="report-amount"><MoneyText Amount="@category.Amount" /></strong>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <EmptyState Text="No category statistics found." />
+                }
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>Monthly Trend</h2>
+                        <span>Last @trendMonths months</span>
+                    </div>
+                </div>
+                @if (trendStatistics?.Items.Count > 0)
+                {
+                    <div class="trend-bars">
+                        @foreach (var item in trendStatistics.Items)
+                        {
+                            <div class="trend-bar">
+                                <div title="@CurrencyFormatter.Format(item.Amount)">
+                                    <i style="height:@TrendHeight(item.Amount)%"></i>
+                                </div>
+                                <span>@item.Month.ToString("00")</span>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <EmptyState Text="No trend data found." />
+                }
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>Daily Spending</h2>
+                        <span>@selectedYear-@selectedMonth.ToString("00")</span>
+                    </div>
+                </div>
+                @if (dailyStatistics?.Days.Count > 0)
+                {
+                    <div class="day-bars report-day-bars">
+                        @foreach (var day in dailyStatistics.Days)
+                        {
+                            <div class="day-bar">
+                                <div title="@($"{day.Date:yyyy-MM-dd}: {CurrencyFormatter.Format(day.Amount)}")">
+                                    <i style="height:@DailyHeight(day.Amount)%"></i>
+                                </div>
+                                <span>@day.Date.Day</span>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <EmptyState Text="No daily spending found." />
+                }
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>Yearly Summary</h2>
+                        <span>@selectedYear</span>
+                    </div>
+                </div>
+                @if (yearlySummary?.MonthlyBreakdown.Count > 0)
+                {
+                    <div class="yearly-list">
+                        @foreach (var item in yearlySummary.MonthlyBreakdown)
+                        {
+                            <div class="yearly-row">
+                                <div>
+                                    <strong>@item.Month.ToString("00")</strong>
+                                    <span>@item.ExpenseCount records</span>
+                                </div>
+                                <div class="horizontal-bar" aria-hidden="true">
+                                    <i style="width:@YearlyWidth(item.Amount)%"></i>
+                                </div>
+                                <strong class="report-amount"><MoneyText Amount="@item.Amount" /></strong>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <EmptyState Text="No yearly summary found." />
+                }
+            </section>
+        </div>
+    }
+</section>
+
+@code {
+    private int selectedYear = DateTime.Today.Year;
+    private int selectedMonth = DateTime.Today.Month;
+    private int trendMonths = 6;
+    private bool isLoading;
+    private string? errorMessage;
+    private MonthlySummaryResponse? monthlySummary;
+    private YearlySummaryResponse? yearlySummary;
+    private CategoryStatisticsResponse? categoryStatistics;
+    private DailyStatisticsResponse? dailyStatistics;
+    private TrendStatisticsResponse? trendStatistics;
+
+    private string ReportRangeLabel
+    {
+        get
+        {
+            var from = new DateOnly(selectedYear, selectedMonth, 1);
+            var to = from.AddMonths(1).AddDays(-1);
+            return $"{from:yyyy-MM-dd} to {to:yyyy-MM-dd}";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReportsAsync();
+    }
+
+    private async Task LoadReportsAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var from = new DateOnly(selectedYear, selectedMonth, 1);
+            var to = from.AddMonths(1).AddDays(-1);
+
+            monthlySummary = await ApiClient.GetMonthlySummaryAsync(selectedYear, selectedMonth);
+            yearlySummary = await ApiClient.GetYearlySummaryAsync(selectedYear);
+            categoryStatistics = await ApiClient.GetCategoryStatisticsAsync(from, to);
+            dailyStatistics = await ApiClient.GetDailyStatisticsAsync(selectedYear, selectedMonth);
+            trendStatistics = await ApiClient.GetTrendStatisticsAsync(trendMonths);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load reports. {ex.Message}";
+            monthlySummary = null;
+            yearlySummary = null;
+            categoryStatistics = null;
+            dailyStatistics = null;
+            trendStatistics = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private decimal MaxDailyAmount => dailyStatistics?.Days.Count > 0
+        ? dailyStatistics.Days.Max(static day => day.Amount)
+        : 0;
+
+    private decimal MaxTrendAmount => trendStatistics?.Items.Count > 0
+        ? trendStatistics.Items.Max(static item => item.Amount)
+        : 0;
+
+    private decimal MaxYearlyAmount => yearlySummary?.MonthlyBreakdown.Count > 0
+        ? yearlySummary.MonthlyBreakdown.Max(static item => item.Amount)
+        : 0;
+
+    private decimal DailyHeight(decimal amount)
+    {
+        return MaxDailyAmount == 0 ? 0 : Math.Clamp(amount / MaxDailyAmount * 100, 2, 100);
+    }
+
+    private decimal TrendHeight(decimal amount)
+    {
+        return MaxTrendAmount == 0 ? 0 : Math.Clamp(amount / MaxTrendAmount * 100, 2, 100);
+    }
+
+    private decimal YearlyWidth(decimal amount)
+    {
+        return MaxYearlyAmount == 0 ? 0 : Math.Clamp(amount / MaxYearlyAmount * 100, 2, 100);
+    }
+
+    private static decimal ClampPercent(decimal value)
+    {
+        return Math.Clamp(value, 0, 100);
+    }
+
+}

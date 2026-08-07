@@ -1,0 +1,209 @@
+@page "/"
+@inject DailyExpenseApiClient ApiClient
+
+<PageTitle>Dashboard</PageTitle>
+
+<section class="dashboard-page">
+    <header class="page-header">
+        <div>
+            <h1>Dashboard</h1>
+            <p>@SelectedMonthLabel</p>
+        </div>
+        <div class="toolbar">
+            <label>
+                <span>Year</span>
+                <input type="number" min="2000" max="2100" @bind="selectedYear" />
+            </label>
+            <label>
+                <span>Month</span>
+                <select @bind="selectedMonth">
+                    @for (var month = 1; month <= 12; month++)
+                    {
+                        <option value="@month">@month.ToString("00")</option>
+                    }
+                </select>
+            </label>
+            <button type="button" class="primary-button" @onclick="LoadDashboardAsync" disabled="@isLoading">
+                Refresh
+            </button>
+        </div>
+    </header>
+
+    @if (isLoading)
+    {
+        <StateMessage Message="Loading dashboard data..." />
+    }
+    else if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <StateMessage Message="@errorMessage" Kind="error" />
+    }
+    else if (dashboard is null)
+    {
+        <StateMessage Message="No dashboard data." />
+    }
+    else
+    {
+        <div class="metric-grid">
+            <MetricCard Label="Total spent" Value="@CurrencyFormatter.Format(dashboard.MonthlyTotal)" />
+            <MetricCard Label="Total budget" Value="@CurrencyFormatter.Format(dashboard.TotalBudget)" />
+            <MetricCard Label="Remaining" Value="@CurrencyFormatter.Format(dashboard.RemainingBudget)" IsNegative="@(dashboard.RemainingBudget < 0)" />
+            <MetricCard Label="Budget used" Value="@FormatOptionalPercentage(dashboard.BudgetUsagePercentage)" />
+        </div>
+
+        <div class="dashboard-grid">
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Category Spending</h2>
+                    <span>@dashboard.CategoryStats.Count categories</span>
+                </div>
+                @if (dashboard.CategoryStats.Count == 0)
+                {
+                    <EmptyState Text="No spending recorded for this month." />
+                }
+                else
+                {
+                    <div class="category-list">
+                        @foreach (var category in dashboard.CategoryStats)
+                        {
+                            <div class="category-row">
+                                <div>
+                                    <strong>@category.CategoryName</strong>
+                                    <span>@category.ExpenseCount expenses</span>
+                                </div>
+                                <div class="category-value">
+                                    <strong><MoneyText Amount="@category.Amount" /></strong>
+                                    <span>@category.Percentage.ToString("0.##")%</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Daily Spending</h2>
+                    <span>@dashboard.DailySpending.Count days</span>
+                </div>
+                <div class="day-bars">
+                    @foreach (var day in dashboard.DailySpending)
+                    {
+                        <div class="day-bar" title="@($"{day.Date:yyyy-MM-dd}: {CurrencyFormatter.Format(day.Amount)}")">
+                            <span>@day.Date.Day</span>
+                            <div>
+                                <i style="height:@GetDayBarHeight(day.Amount)%"></i>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Recent Expenses</h2>
+                    <span>@dashboard.RecentExpenses.Count items</span>
+                </div>
+                @if (dashboard.RecentExpenses.Count == 0)
+                {
+                    <EmptyState Text="No recent expenses." />
+                }
+                else
+                {
+                    <div class="expense-list">
+                        @foreach (var expense in dashboard.RecentExpenses)
+                        {
+                            <div class="expense-row">
+                                <div>
+                                    <strong>@expense.Title</strong>
+                                    <span>@expense.CategoryName - @expense.ExpenseDate.ToString("yyyy-MM-dd")</span>
+                                </div>
+                                <strong><MoneyText Amount="@expense.Amount" /></strong>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Overspent Categories</h2>
+                    <span>@dashboard.OverspentCategories.Count alerts</span>
+                </div>
+                @if (dashboard.OverspentCategories.Count == 0)
+                {
+                    <EmptyState Text="No category is over budget." />
+                }
+                else
+                {
+                    <div class="category-list danger-list">
+                        @foreach (var category in dashboard.OverspentCategories)
+                        {
+                            <div class="category-row">
+                                <div>
+                                    <strong>@category.CategoryName</strong>
+                                    <span>@category.Percentage.ToString("0.##")% used</span>
+                                </div>
+                                <div class="category-value">
+                                    <strong><MoneyText Amount="@category.Amount" /></strong>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+    }
+</section>
+
+@code {
+    private DashboardResponse? dashboard;
+    private bool isLoading;
+    private string? errorMessage;
+    private int selectedYear = DateTime.Today.Year;
+    private int selectedMonth = DateTime.Today.Month;
+
+    private string SelectedMonthLabel => new DateTime(selectedYear, selectedMonth, 1).ToString("MMMM yyyy");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardAsync();
+    }
+
+    private async Task LoadDashboardAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            dashboard = await ApiClient.GetDashboardAsync(selectedYear, selectedMonth);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Dashboard data could not be loaded. {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private decimal MaxDailyAmount => dashboard?.DailySpending.Count > 0
+        ? dashboard.DailySpending.Max(day => day.Amount)
+        : 0m;
+
+    private decimal GetDayBarHeight(decimal amount)
+    {
+        if (amount <= 0 || MaxDailyAmount <= 0)
+        {
+            return 2;
+        }
+
+        return Math.Max(8, Math.Round(amount / MaxDailyAmount * 100, 2));
+    }
+
+    private static string FormatOptionalPercentage(decimal? percentage)
+    {
+        return percentage is null ? "Not set" : $"{percentage.Value:0.##}%";
+    }
+}

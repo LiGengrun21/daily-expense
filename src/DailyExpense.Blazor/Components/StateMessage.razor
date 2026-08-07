@@ -1,0 +1,16 @@
+@if (!string.IsNullOrWhiteSpace(Message))
+{
+    <div class="@CssClass">@Message</div>
+}
+
+@code {
+    [Parameter]
+    public string? Message { get; set; }
+
+    [Parameter]
+    public string? Kind { get; set; }
+
+    private string CssClass => string.IsNullOrWhiteSpace(Kind)
+        ? "state-panel"
+        : $"state-panel {Kind}";
+}

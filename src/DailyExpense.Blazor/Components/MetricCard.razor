@@ -1,0 +1,15 @@
+<article class="metric-card">
+    <span>@Label</span>
+    <strong class="@(IsNegative ? "negative" : null)">@Value</strong>
+</article>
+
+@code {
+    [Parameter]
+    public string Label { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Value { get; set; } = string.Empty;
+
+    [Parameter]
+    public bool IsNegative { get; set; }
+}

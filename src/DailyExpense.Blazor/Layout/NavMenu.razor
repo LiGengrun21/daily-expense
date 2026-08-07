@@ -1,0 +1,35 @@
+<div class="brand-row">
+    <NavLink class="brand" href="/" Match="NavLinkMatch.All">Daily Expense</NavLink>
+</div>
+
+<div class="nav-scrollable">
+    <nav aria-label="Main">
+        <ul class="nav-list">
+        @foreach (var item in NavItems)
+        {
+            <li class="nav-item">
+                <NavLink class="nav-link" href="@item.Href" Match="@item.Match">
+                    <span class="nav-icon" aria-hidden="true">@item.Icon</span> @item.Text
+                </NavLink>
+            </li>
+        }
+        </ul>
+    </nav>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<NavItem> NavItems =
+    [
+        new("Dashboard", "/", "D", NavLinkMatch.All),
+        new("Expenses", "/expenses", "E", NavLinkMatch.Prefix),
+        new("Categories", "/categories", "C", NavLinkMatch.Prefix),
+        new("Budgets", "/budgets", "B", NavLinkMatch.Prefix),
+        new("Reports", "/reports", "R", NavLinkMatch.Prefix)
+    ];
+
+    private sealed record NavItem(
+        string Text,
+        string Href,
+        string Icon,
+        NavLinkMatch Match);
+}

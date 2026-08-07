@@ -1,0 +1,12 @@
+<span class="@CssClass">@CurrencyFormatter.Format(Amount, Fallback)</span>
+
+@code {
+    [Parameter]
+    public decimal? Amount { get; set; }
+
+    [Parameter]
+    public string Fallback { get; set; } = "Not set";
+
+    [Parameter]
+    public string? CssClass { get; set; }
+}

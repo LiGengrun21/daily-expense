@@ -1,0 +1,362 @@
+@page "/budgets"
+@using System.ComponentModel.DataAnnotations
+@using DailyExpense.Contracts.Budgets
+@using DailyExpense.Contracts.Categories
+@inject DailyExpense.Blazor.Services.DailyExpenseApiClient ApiClient
+
+<PageTitle>Budgets</PageTitle>
+
+<section class="budgets-page">
+    <div class="page-header">
+        <div>
+            <h1>Budgets</h1>
+            <p>Set monthly limits and compare them with actual spending.</p>
+        </div>
+        <div class="toolbar">
+            <label>
+                Year
+                <input type="number" min="2000" max="2100" @bind="selectedYear" />
+            </label>
+            <label>
+                Month
+                <select @bind="selectedMonth">
+                    @for (var month = 1; month <= 12; month++)
+                    {
+                        <option value="@month">@month.ToString("00")</option>
+                    }
+                </select>
+            </label>
+            <button class="primary-button" type="button" @onclick="ApplyMonth" disabled="@isLoading">Apply</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <StateMessage Message="@errorMessage" Kind="error" />
+    }
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <StateMessage Message="@statusMessage" Kind="success" />
+    }
+
+    <div class="budget-summary-grid">
+        <MetricCard Label="Budget" Value="@CurrencyFormatter.Format(TotalBudget)" />
+        <MetricCard Label="Spent" Value="@CurrencyFormatter.Format(TotalSpent)" />
+        <MetricCard Label="Remaining" Value="@CurrencyFormatter.Format(TotalRemaining)" IsNegative="@(TotalRemaining < 0)" />
+        <MetricCard Label="Over Budget" Value="@OverBudgetCount.ToString()" />
+    </div>
+
+    <div class="budget-workspace">
+        <section class="panel budget-list-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Budget List</h2>
+                    <span>@TotalLabel</span>
+                </div>
+                <button class="secondary-button" type="button" @onclick="ResetForm">New</button>
+            </div>
+
+            @if (isLoading)
+            {
+                <EmptyState Text="Loading budgets..." />
+            }
+            else if (budgets.Count == 0)
+            {
+                <EmptyState Text="No budgets found." />
+            }
+            else
+            {
+                <div class="budget-list">
+                    @foreach (var budget in budgets)
+                    {
+                        <article class="budget-row @(editingBudgetId == budget.Id ? "selected-row" : null)">
+                            <div class="budget-row-main">
+                                <div>
+                                    <strong>@BudgetName(budget)</strong>
+                                    <span>@budget.Year-@budget.Month.ToString("00")</span>
+                                </div>
+                                <span class="budget-status @(budget.IsOverBudget ? "over" : "ok")">
+                                    @(budget.IsOverBudget ? "Over" : "On Track")
+                                </span>
+                            </div>
+
+                            <div class="budget-progress" aria-hidden="true">
+                                <i style="width:@UsageWidth(budget)%"></i>
+                            </div>
+
+                            <div class="budget-row-values">
+                                <span>Budget <strong><MoneyText Amount="@budget.Amount" /></strong></span>
+                                <span>Spent <strong><MoneyText Amount="@budget.SpentAmount" /></strong></span>
+                                <span>Remaining <strong class="@(budget.RemainingAmount < 0 ? "negative" : null)"><MoneyText Amount="@budget.RemainingAmount" /></strong></span>
+                            </div>
+
+                            <div class="budget-actions">
+                                <button class="icon-button" type="button" title="Edit" @onclick="() => BeginEdit(budget)">E</button>
+                                <ConfirmDeleteButton Message="@($"Delete budget '{BudgetName(budget)}'?")" OnConfirmed="@(() => DeleteBudget(budget))" />
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="panel budget-form-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>@(editingBudgetId is null ? "Add Budget" : "Edit Budget")</h2>
+                    <span>@(editingBudgetId is null ? "Create a monthly limit" : "Update the selected limit")</span>
+                </div>
+            </div>
+
+            <EditForm Model="form" OnValidSubmit="SaveBudget">
+                <DataAnnotationsValidator />
+
+                <div class="form-grid">
+                    <label>
+                        Year
+                        <InputNumber @bind-Value="form.Year" />
+                        <ValidationMessage For="@(() => form.Year)" />
+                    </label>
+                    <label>
+                        Month
+                        <InputSelect @bind-Value="form.Month">
+                            @for (var month = 1; month <= 12; month++)
+                            {
+                                <option value="@month">@month.ToString("00")</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => form.Month)" />
+                    </label>
+                    <label>
+                        Amount
+                        <InputNumber @bind-Value="form.Amount" />
+                        <ValidationMessage For="@(() => form.Amount)" />
+                    </label>
+                    <label>
+                        Category
+                        <InputSelect @bind-Value="form.CategoryIdText">
+                            <option value="">Total Budget</option>
+                            @foreach (var category in categories)
+                            {
+                                <option value="@category.Id">@category.Name</option>
+                            }
+                        </InputSelect>
+                    </label>
+                </div>
+
+                <div class="budget-preview">
+                    <strong>@PreviewName</strong>
+                    <span>@form.Year-@form.Month.ToString("00") / @CurrencyFormatter.Format(form.Amount)</span>
+                </div>
+
+                <div class="form-actions">
+                    <button class="primary-button" type="submit" disabled="@isSaving">@(isSaving ? "Saving..." : "Save")</button>
+                    <button class="secondary-button" type="button" @onclick="ResetForm" disabled="@isSaving">Cancel</button>
+                </div>
+            </EditForm>
+        </section>
+    </div>
+</section>
+
+@code {
+    private IReadOnlyList<CategoryResponse> categories = [];
+    private IReadOnlyList<MonthlyBudgetResponse> budgets = [];
+    private BudgetFormModel form = BudgetFormModel.CreateDefault();
+    private Guid? editingBudgetId;
+    private string? errorMessage;
+    private string? statusMessage;
+    private int selectedYear = DateTime.Today.Year;
+    private int selectedMonth = DateTime.Today.Month;
+    private bool isLoading;
+    private bool isSaving;
+
+    private string TotalLabel => budgets.Count == 1
+        ? "1 budget"
+        : $"{budgets.Count} budgets";
+
+    private decimal TotalBudget => budgets.Sum(static budget => budget.Amount);
+    private decimal TotalSpent => budgets.Sum(static budget => budget.SpentAmount);
+    private decimal TotalRemaining => TotalBudget - TotalSpent;
+    private int OverBudgetCount => budgets.Count(static budget => budget.IsOverBudget);
+
+    private string PreviewName => string.IsNullOrWhiteSpace(form.CategoryIdText)
+        ? "Total Budget"
+        : categories.FirstOrDefault(category => category.Id.ToString() == form.CategoryIdText)?.Name ?? "Category Budget";
+
+    protected override async Task OnInitializedAsync()
+    {
+        form = BudgetFormModel.CreateDefault(selectedYear, selectedMonth);
+        await LoadCategoriesAsync();
+        await LoadBudgetsAsync();
+    }
+
+    private async Task LoadCategoriesAsync()
+    {
+        try
+        {
+            categories = await ApiClient.GetCategoriesAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load categories. {ex.Message}";
+            categories = [];
+        }
+    }
+
+    private async Task LoadBudgetsAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            budgets = await ApiClient.GetBudgetsAsync(selectedYear, selectedMonth);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load budgets. {ex.Message}";
+            budgets = [];
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ApplyMonth()
+    {
+        ResetForm();
+        await LoadBudgetsAsync();
+    }
+
+    private void BeginEdit(MonthlyBudgetResponse budget)
+    {
+        editingBudgetId = budget.Id;
+        statusMessage = null;
+        errorMessage = null;
+
+        form = new BudgetFormModel
+        {
+            Year = budget.Year,
+            Month = budget.Month,
+            Amount = budget.Amount,
+            CategoryIdText = budget.CategoryId?.ToString() ?? string.Empty
+        };
+    }
+
+    private async Task SaveBudget()
+    {
+        isSaving = true;
+        errorMessage = null;
+        statusMessage = null;
+
+        try
+        {
+            var categoryId = ParseCategoryId(form.CategoryIdText);
+
+            if (editingBudgetId is Guid budgetId)
+            {
+                await ApiClient.UpdateBudgetAsync(budgetId, new UpdateMonthlyBudgetRequest(
+                    form.Year,
+                    form.Month,
+                    form.Amount,
+                    categoryId));
+
+                statusMessage = "Budget updated.";
+            }
+            else
+            {
+                await ApiClient.CreateBudgetAsync(new CreateMonthlyBudgetRequest(
+                    form.Year,
+                    form.Month,
+                    form.Amount,
+                    categoryId));
+
+                statusMessage = "Budget created.";
+            }
+
+            selectedYear = form.Year;
+            selectedMonth = form.Month;
+            ResetForm();
+            await LoadBudgetsAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to save budget. {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteBudget(MonthlyBudgetResponse budget)
+    {
+        errorMessage = null;
+        statusMessage = null;
+
+        try
+        {
+            await ApiClient.DeleteBudgetAsync(budget.Id);
+            statusMessage = "Budget deleted.";
+
+            if (editingBudgetId == budget.Id)
+            {
+                ResetForm();
+            }
+
+            await LoadBudgetsAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to delete budget. {ex.Message}";
+        }
+    }
+
+    private void ResetForm()
+    {
+        editingBudgetId = null;
+        form = BudgetFormModel.CreateDefault(selectedYear, selectedMonth);
+    }
+
+    private static Guid? ParseCategoryId(string? value)
+    {
+        return Guid.TryParse(value, out var id) ? id : null;
+    }
+
+    private static string BudgetName(MonthlyBudgetResponse budget)
+    {
+        return string.IsNullOrWhiteSpace(budget.CategoryName) ? "Total Budget" : budget.CategoryName;
+    }
+
+    private static decimal UsageWidth(MonthlyBudgetResponse budget)
+    {
+        return Math.Clamp(budget.UsagePercentage, 0, 100);
+    }
+
+    private sealed class BudgetFormModel
+    {
+        [Range(2000, 2100)]
+        public int Year { get; set; }
+
+        [Range(1, 12)]
+        public int Month { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Range(typeof(decimal), "0.01", "999999999")]
+        public decimal Amount { get; set; }
+
+        public string CategoryIdText { get; set; } = string.Empty;
+
+        public static BudgetFormModel CreateDefault(int? year = null, int? month = null)
+        {
+            return new BudgetFormModel
+            {
+                Year = year ?? DateTime.Today.Year,
+                Month = month ?? DateTime.Today.Month,
+                Amount = 0,
+                CategoryIdText = string.Empty
+            };
+        }
+    }
+}
