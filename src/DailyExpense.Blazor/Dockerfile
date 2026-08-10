@@ -13,4 +13,6 @@ RUN dotnet publish src/DailyExpense.Blazor/DailyExpense.Blazor.csproj -c Release
 FROM nginx:1.27-alpine AS final
 COPY src/DailyExpense.Blazor/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/publish/wwwroot /usr/share/nginx/html
+COPY src/DailyExpense.Blazor/docker-entrypoint.d/10-generate-appsettings.sh /docker-entrypoint.d/10-generate-appsettings.sh
+RUN chmod +x /docker-entrypoint.d/10-generate-appsettings.sh
 EXPOSE 80

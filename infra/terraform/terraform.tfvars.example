@@ -1,0 +1,36 @@
+project_name = "daily-expense"
+environment  = "dev"
+location     = "northeurope"
+
+subscription_id = "XXXXXXX"
+
+# ACR names are globally unique. Change this if the default name is unavailable.
+# container_registry_name = "acrdailyexpensedev001"
+
+log_retention_days = 30
+
+deploy_container_apps = true
+container_image_tag   = "latest"
+api_image_name        = "daily-expense-api"
+blazor_image_name     = "daily-expense-blazor"
+
+api_environment_name = "Production"
+
+api_min_replicas    = 0
+api_max_replicas    = 1
+blazor_min_replicas = 0
+blazor_max_replicas = 1
+
+postgres_database_name                 = "daily_expense"
+postgres_admin_username                = "dailyexpenseadmin"
+postgres_admin_password                = "XXXXXX"
+postgres_version                       = "16"
+postgres_sku_name                      = "B_Standard_B1ms"
+postgres_storage_mb                    = 32768
+postgres_backup_retention_days         = 7
+postgres_public_network_access_enabled = true
+postgres_allow_azure_services          = true
+
+tags = {
+  owner = "personal"
+}

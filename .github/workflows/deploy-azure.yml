@@ -1,0 +1,145 @@
+name: Deploy Azure
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Optional image tag. Defaults to the short commit SHA.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  API_IMAGE_NAME: daily-expense-api
+  BLAZOR_IMAGE_NAME: daily-expense-blazor
+  ACR_NAME: ${{ vars.ACR_NAME || 'acrdailyexpensedev' }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-daily-expense-dev' }}
+  API_CONTAINER_APP_NAME: ${{ vars.API_CONTAINER_APP_NAME || 'ca-daily-expense-dev-api' }}
+  BLAZOR_CONTAINER_APP_NAME: ${{ vars.BLAZOR_CONTAINER_APP_NAME || 'ca-daily-expense-dev-blazor' }}
+
+jobs:
+  build-and-push:
+    name: Build and push Docker images
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve image metadata
+        id: image
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            image_tag="${{ inputs.image_tag }}"
+          elif [ -n "${{ github.event.workflow_run.head_sha }}" ]; then
+            image_tag="${{ github.event.workflow_run.head_sha }}"
+            image_tag="${image_tag:0:7}"
+          else
+            image_tag="${GITHUB_SHA::7}"
+          fi
+
+          acr_login_server="$(az acr show \
+            --name "${ACR_NAME}" \
+            --query loginServer \
+            --output tsv)"
+
+          echo "tag=${image_tag}" >> "$GITHUB_OUTPUT"
+          echo "acr_login_server=${acr_login_server}" >> "$GITHUB_OUTPUT"
+
+      - name: Docker login to ACR
+        run: az acr login --name "${ACR_NAME}"
+
+      - name: Build API image
+        run: |
+          docker build \
+            --file src/DailyExpense.Api/Dockerfile \
+            --tag "${{ steps.image.outputs.acr_login_server }}/${API_IMAGE_NAME}:${{ steps.image.outputs.tag }}" \
+            --tag "${{ steps.image.outputs.acr_login_server }}/${API_IMAGE_NAME}:latest" \
+            .
+
+      - name: Build Blazor image
+        run: |
+          docker build \
+            --file src/DailyExpense.Blazor/Dockerfile \
+            --tag "${{ steps.image.outputs.acr_login_server }}/${BLAZOR_IMAGE_NAME}:${{ steps.image.outputs.tag }}" \
+            --tag "${{ steps.image.outputs.acr_login_server }}/${BLAZOR_IMAGE_NAME}:latest" \
+            .
+
+      - name: Push API image
+        run: |
+          docker push "${{ steps.image.outputs.acr_login_server }}/${API_IMAGE_NAME}:${{ steps.image.outputs.tag }}"
+          docker push "${{ steps.image.outputs.acr_login_server }}/${API_IMAGE_NAME}:latest"
+
+      - name: Push Blazor image
+        run: |
+          docker push "${{ steps.image.outputs.acr_login_server }}/${BLAZOR_IMAGE_NAME}:${{ steps.image.outputs.tag }}"
+          docker push "${{ steps.image.outputs.acr_login_server }}/${BLAZOR_IMAGE_NAME}:latest"
+
+      - name: Enable Azure CLI dynamic extensions
+        run: az config set extension.use_dynamic_install=yes_without_prompt
+
+      - name: Deploy API Container App
+        run: |
+          az containerapp update \
+            --name "${API_CONTAINER_APP_NAME}" \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --image "${{ steps.image.outputs.acr_login_server }}/${API_IMAGE_NAME}:${{ steps.image.outputs.tag }}"
+
+      - name: Deploy Blazor Container App
+        run: |
+          az containerapp update \
+            --name "${BLAZOR_CONTAINER_APP_NAME}" \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --image "${{ steps.image.outputs.acr_login_server }}/${BLAZOR_IMAGE_NAME}:${{ steps.image.outputs.tag }}"
+
+      - name: Resolve deployed URLs
+        id: deployed
+        shell: bash
+        run: |
+          api_fqdn="$(az containerapp show \
+            --name "${API_CONTAINER_APP_NAME}" \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)"
+
+          blazor_fqdn="$(az containerapp show \
+            --name "${BLAZOR_CONTAINER_APP_NAME}" \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)"
+
+          echo "api_url=https://${api_fqdn}" >> "$GITHUB_OUTPUT"
+          echo "blazor_url=https://${blazor_fqdn}" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          echo "Published images:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ${{ steps.image.outputs.acr_login_server }}/${API_IMAGE_NAME}:${{ steps.image.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ${{ steps.image.outputs.acr_login_server }}/${API_IMAGE_NAME}:latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ${{ steps.image.outputs.acr_login_server }}/${BLAZOR_IMAGE_NAME}:${{ steps.image.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ${{ steps.image.outputs.acr_login_server }}/${BLAZOR_IMAGE_NAME}:latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deployed apps:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- API: ${{ steps.deployed.outputs.api_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Blazor: ${{ steps.deployed.outputs.blazor_url }}" >> "$GITHUB_STEP_SUMMARY"
