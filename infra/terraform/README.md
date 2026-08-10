@@ -150,6 +150,36 @@ az role assignment create \
 Configure the federated credential for the GitHub `master` branch. Replace
 `<github-owner>` and `<github-repo>` with the real repository owner and name.
 
+Azure Portal steps:
+
+```text
+Microsoft Entra ID
+-> App registrations
+-> daily-expense-github-actions
+-> Certificates & secrets
+-> Federated credentials
+-> Add credential
+```
+
+Use these values:
+
+```text
+Federated credential scenario: GitHub Actions deploying Azure resources
+Organization: <github-owner>
+Repository: <github-repo>
+Entity type: Branch
+GitHub branch name: master
+Name: daily-expense-master
+```
+
+This creates a credential with this subject:
+
+```text
+repo:<github-owner>/<github-repo>:ref:refs/heads/master
+```
+
+Equivalent Azure CLI configuration:
+
 ```json
 {
   "name": "daily-expense-master",
