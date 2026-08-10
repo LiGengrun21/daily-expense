@@ -179,7 +179,7 @@ az role assignment create \
   --scope "/subscriptions/${subscription_id}/resourceGroups/rg-daily-expense-dev"
 ```
 
-Configure the federated credential for the GitHub `master` branch. Replace
+Configure the federated credential for the GitHub `dev` environment. Replace
 `<github-owner>` and `<github-repo>` with the real repository owner and name.
 
 Azure Portal steps:
@@ -199,25 +199,25 @@ Use these values:
 Federated credential scenario: GitHub Actions deploying Azure resources
 Organization: <github-owner>
 Repository: <github-repo>
-Entity type: Branch
-GitHub branch name: master
-Name: daily-expense-master
+Entity type: Environment
+GitHub environment name: dev
+Name: daily-expense-dev
 ```
 
 This creates a credential with this subject:
 
 ```text
-repo:<github-owner>/<github-repo>:ref:refs/heads/master
+repo:<github-owner>/<github-repo>:environment:dev
 ```
 
 Equivalent Azure CLI configuration:
 
 ```json
 {
-  "name": "daily-expense-master",
+  "name": "daily-expense-dev",
   "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:<github-owner>/<github-repo>:ref:refs/heads/master",
-  "description": "GitHub Actions master branch deployment",
+  "subject": "repo:<github-owner>/<github-repo>:environment:dev",
+  "description": "GitHub Actions dev environment deployment",
   "audiences": [
     "api://AzureADTokenExchange"
   ]
@@ -231,6 +231,18 @@ az ad app federated-credential create \
   --id "<AZURE_CLIENT_ID>" \
   --parameters credential.json
 ```
+
+If GitHub Actions fails with this error:
+
+```text
+AADSTS700213: No matching federated identity record found for presented assertion subject 'repo:<github-owner>/<github-repo>:environment:dev'
+```
+
+the Azure federated credential subject does not match the token requested by the
+workflow. Because the `deploy-azure` job uses `environment: dev`, the federated
+credential must use `Entity type: Environment` and `GitHub environment name:
+dev`. A branch credential such as `repo:<github-owner>/<github-repo>:ref:refs/heads/master`
+will not match this job.
 
 ### Required variables
 

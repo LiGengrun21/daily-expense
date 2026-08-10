@@ -228,10 +228,28 @@ GitHub Actions uses OIDC to log into Azure. The Azure identity must have:
 
 - Microsoft Entra App Registration.
 - Matching Service Principal / Enterprise Application.
-- Federated Credential for the GitHub `master` branch.
+- Federated Credential for the GitHub `dev` environment.
 - RBAC permission to update resources in `rg-daily-expense-dev`.
 
 For the MVP, resource group level `Contributor` is enough.
+
+Because the `deploy-azure` job uses:
+
+```yaml
+environment: dev
+```
+
+the Azure federated credential subject must be environment-based:
+
+```text
+repo:<github-owner>/<github-repo>:environment:dev
+```
+
+A branch-based subject such as this will not match the deployment job:
+
+```text
+repo:<github-owner>/<github-repo>:ref:refs/heads/master
+```
 
 ## Current limitations
 
