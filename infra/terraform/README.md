@@ -147,15 +147,15 @@ az role assignment create \
   --scope "/subscriptions/${subscription_id}/resourceGroups/rg-daily-expense-dev"
 ```
 
-Configure the federated credential for the GitHub `main` branch. Replace
+Configure the federated credential for the GitHub `master` branch. Replace
 `<github-owner>` and `<github-repo>` with the real repository owner and name.
 
 ```json
 {
-  "name": "daily-expense-main",
+  "name": "daily-expense-master",
   "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:<github-owner>/<github-repo>:ref:refs/heads/main",
-  "description": "GitHub Actions main branch deployment",
+  "subject": "repo:<github-owner>/<github-repo>:ref:refs/heads/master",
+  "description": "GitHub Actions master branch deployment",
   "audiences": [
     "api://AzureADTokenExchange"
   ]
