@@ -135,6 +135,38 @@ Create a service principal for the app if it does not already exist:
 az ad sp create --id "<AZURE_CLIENT_ID>"
 ```
 
+If Azure login in GitHub Actions fails with this error:
+
+```text
+AADSTS7000229: The client application is missing service principal in the tenant
+```
+
+it means the App Registration exists, but the matching Service Principal /
+Enterprise Application does not exist in the tenant used by GitHub Actions.
+Create it with:
+
+```bash
+az ad sp create --id "<AZURE_CLIENT_ID>"
+```
+
+Then verify it exists:
+
+```bash
+az ad sp show --id "<AZURE_CLIENT_ID>"
+```
+
+In the Azure Portal, it should also appear under:
+
+```text
+Microsoft Entra ID
+-> Enterprise applications
+-> All applications
+-> Search: daily-expense-github-actions
+```
+
+If it does not appear in the portal but `az ad sp show` succeeds, check the
+Enterprise applications filters.
+
 Grant the app permission to update the dev resources. For the MVP, resource
 group level `Contributor` is enough:
 

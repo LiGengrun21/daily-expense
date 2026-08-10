@@ -20,6 +20,10 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   API_IMAGE_NAME: daily-expense-api
   BLAZOR_IMAGE_NAME: daily-expense-blazor
@@ -110,6 +114,7 @@ jobs:
   deploy-azure:
     name: Build, push, and deploy Azure
     runs-on: ubuntu-latest
+    environment: dev
     needs:
       - dotnet
       - docker-smoke
@@ -208,6 +213,27 @@ jobs:
 
           echo "api_url=https://${api_fqdn}" >> "$GITHUB_OUTPUT"
           echo "blazor_url=https://${blazor_fqdn}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test deployed API
+        run: |
+          for i in {1..30}; do
+            if curl -fsS "${{ steps.deployed.outputs.api_url }}/health"; then
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          az containerapp logs show \
+            --name "${API_CONTAINER_APP_NAME}" \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --tail 100
+          exit 1
+
+      - name: Smoke test deployed Blazor
+        run: |
+          curl -fsS "${{ steps.deployed.outputs.blazor_url }}/" > /dev/null
+          curl -fsS "${{ steps.deployed.outputs.blazor_url }}/appsettings.json"
 
       - name: Summary
         run: |
