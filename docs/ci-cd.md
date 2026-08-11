@@ -167,7 +167,7 @@ Steps:
 | Setup .NET for EF Core migrations | Installs the .NET 10 SDK for the migration command. |
 | Enable Azure CLI dynamic extensions | Allows Azure CLI to install the Container Apps extension if needed. |
 | Get GitHub runner public IP | Reads the public IP address of the GitHub-hosted runner. |
-| Allow GitHub runner to access PostgreSQL | Temporarily adds the runner IP to the Azure PostgreSQL firewall. |
+| Allow GitHub runner to access PostgreSQL | Temporarily adds the runner IP to the Azure PostgreSQL firewall using `--server-name` for the PostgreSQL server and `--name` for the firewall rule. |
 | Install EF Core tools | Installs `dotnet-ef` into a temporary runner-local `./.tools` directory. |
 | Run EF Core migrations | Applies pending EF Core migrations to Azure PostgreSQL. |
 | Remove GitHub runner PostgreSQL firewall rule | Removes the temporary PostgreSQL firewall rule even if migration fails. |

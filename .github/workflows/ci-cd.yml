@@ -197,8 +197,8 @@ jobs:
         run: |
           az postgres flexible-server firewall-rule create \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --name "${POSTGRES_SERVER_NAME}" \
-            --rule-name "github-actions-${GITHUB_RUN_ID}" \
+            --server-name "${POSTGRES_SERVER_NAME}" \
+            --name "github-actions-${GITHUB_RUN_ID}" \
             --start-ip-address "${{ steps.runner_ip.outputs.ip }}" \
             --end-ip-address "${{ steps.runner_ip.outputs.ip }}"
 
@@ -218,8 +218,8 @@ jobs:
         run: |
           az postgres flexible-server firewall-rule delete \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --name "${POSTGRES_SERVER_NAME}" \
-            --rule-name "github-actions-${GITHUB_RUN_ID}" \
+            --server-name "${POSTGRES_SERVER_NAME}" \
+            --name "github-actions-${GITHUB_RUN_ID}" \
             --yes || true
 
       - name: Deploy API Container App
