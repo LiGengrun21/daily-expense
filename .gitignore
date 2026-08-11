@@ -28,6 +28,7 @@ TestResults/
 bin/
 obj/
 .vs/
+.tools/
 *.user
 *.suo
 

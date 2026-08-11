@@ -31,6 +31,7 @@ env:
   AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-daily-expense-dev' }}
   API_CONTAINER_APP_NAME: ${{ vars.API_CONTAINER_APP_NAME || 'ca-daily-expense-dev-api' }}
   BLAZOR_CONTAINER_APP_NAME: ${{ vars.BLAZOR_CONTAINER_APP_NAME || 'ca-daily-expense-dev-blazor' }}
+  POSTGRES_SERVER_NAME: ${{ vars.POSTGRES_SERVER_NAME || 'pg-daily-expense-dev' }}
 
 jobs:
   dotnet:
@@ -178,8 +179,48 @@ jobs:
           docker push "${{ steps.image.outputs.acr_login_server }}/${BLAZOR_IMAGE_NAME}:${{ steps.image.outputs.tag }}"
           docker push "${{ steps.image.outputs.acr_login_server }}/${BLAZOR_IMAGE_NAME}:latest"
 
+      - name: Setup .NET for EF Core migrations
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
       - name: Enable Azure CLI dynamic extensions
         run: az config set extension.use_dynamic_install=yes_without_prompt
+
+      - name: Get GitHub runner public IP
+        id: runner_ip
+        run: |
+          runner_ip="$(curl -fsS https://api.ipify.org)"
+          echo "ip=${runner_ip}" >> "$GITHUB_OUTPUT"
+
+      - name: Allow GitHub runner to access PostgreSQL
+        run: |
+          az postgres flexible-server firewall-rule create \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "${POSTGRES_SERVER_NAME}" \
+            --rule-name "github-actions-${GITHUB_RUN_ID}" \
+            --start-ip-address "${{ steps.runner_ip.outputs.ip }}" \
+            --end-ip-address "${{ steps.runner_ip.outputs.ip }}"
+
+      - name: Install EF Core tools
+        run: dotnet tool install --tool-path ./.tools dotnet-ef --version 10.0.4
+
+      - name: Run EF Core migrations
+        env:
+          ConnectionStrings__DefaultConnection: ${{ secrets.AZURE_POSTGRES_CONNECTION_STRING }}
+        run: |
+          ./.tools/dotnet-ef database update \
+            --project src/DailyExpense.Infrastructure \
+            --startup-project src/DailyExpense.Api
+
+      - name: Remove GitHub runner PostgreSQL firewall rule
+        if: always() && steps.runner_ip.outputs.ip != ''
+        run: |
+          az postgres flexible-server firewall-rule delete \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "${POSTGRES_SERVER_NAME}" \
+            --rule-name "github-actions-${GITHUB_RUN_ID}" \
+            --yes || true
 
       - name: Deploy API Container App
         run: |

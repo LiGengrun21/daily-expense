@@ -128,6 +128,7 @@ deployment workflow.
 | `AZURE_CLIENT_ID` | Client ID used by `azure/login` for GitHub Actions OIDC authentication. | Create or reuse a Microsoft Entra application for GitHub Actions. Run `az ad app create --display-name daily-expense-github-actions --query appId --output tsv`. |
 | `AZURE_TENANT_ID` | Azure tenant ID used by `azure/login`. | Run `az account show --query tenantId --output tsv`. |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription used by `azure/login`. | Run `az account show --query id --output tsv`. |
+| `AZURE_POSTGRES_CONNECTION_STRING` | Connection string used by `dotnet ef database update` during deployment. | Build it from the Terraform PostgreSQL output and the admin password: `Host=<postgres-fqdn>;Port=5432;Database=daily_expense;Username=dailyexpenseadmin;Password=<password>;SSL Mode=Require;Trust Server Certificate=true`. |
 
 Create a service principal for the app if it does not already exist:
 
@@ -255,6 +256,7 @@ Apps deployment workflow. They are not secrets.
 | `AZURE_RESOURCE_GROUP` | Resource group containing the Container Apps. | `rg-daily-expense-dev`, or run `terraform output resource_group_name`. |
 | `API_CONTAINER_APP_NAME` | API Container App name to update after pushing an image. | `ca-daily-expense-dev-api`, or run `terraform output api_container_app_name`. |
 | `BLAZOR_CONTAINER_APP_NAME` | Blazor Container App name to update after pushing an image. | `ca-daily-expense-dev-blazor`, or run `terraform output blazor_container_app_name`. |
+| `POSTGRES_SERVER_NAME` | Azure PostgreSQL Flexible Server name used when temporarily adding the GitHub runner firewall rule. | `pg-daily-expense-dev`, or run `terraform output postgres_server_name`. |
 
 The workflow has dev defaults for these variables, but setting them in GitHub is
 clearer and makes later environment changes safer.
@@ -313,12 +315,3 @@ Non-sensitive Terraform values can be GitHub variables:
 Most of these already have defaults in `variables.tf`. The minimum required
 Terraform values for CI/CD are `TF_VAR_subscription_id` and
 `TF_VAR_postgres_admin_password`.
-
-### Future migration secret
-
-If a later deployment workflow runs EF Core migrations against Azure PostgreSQL,
-add this extra secret:
-
-| Secret | Purpose | How to get the value |
-| --- | --- | --- |
-| `AZURE_POSTGRES_CONNECTION_STRING` | Connection string used by `dotnet ef database update`. | Build it from the Terraform PostgreSQL output and the admin password: `Host=<postgres-fqdn>;Port=5432;Database=daily_expense;Username=dailyexpenseadmin;Password=<password>;SSL Mode=Require;Trust Server Certificate=true`. |

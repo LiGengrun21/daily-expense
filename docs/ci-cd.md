@@ -18,6 +18,7 @@ The CI/CD pipeline is designed to:
 - Verify the app can start locally with Docker Compose.
 - Build API and Blazor container images.
 - Push images to Azure Container Registry.
+- Run EF Core migrations against Azure PostgreSQL.
 - Deploy the latest images to Azure Container Apps.
 - Verify the deployed Azure services are reachable.
 
@@ -163,7 +164,13 @@ Steps:
 | Build Blazor image | Builds the Blazor static frontend nginx image. |
 | Push API image | Pushes the API image to ACR using commit SHA and `latest` tags. |
 | Push Blazor image | Pushes the Blazor image to ACR using commit SHA and `latest` tags. |
+| Setup .NET for EF Core migrations | Installs the .NET 10 SDK for the migration command. |
 | Enable Azure CLI dynamic extensions | Allows Azure CLI to install the Container Apps extension if needed. |
+| Get GitHub runner public IP | Reads the public IP address of the GitHub-hosted runner. |
+| Allow GitHub runner to access PostgreSQL | Temporarily adds the runner IP to the Azure PostgreSQL firewall. |
+| Install EF Core tools | Installs `dotnet-ef` into a temporary runner-local `./.tools` directory. |
+| Run EF Core migrations | Applies pending EF Core migrations to Azure PostgreSQL. |
+| Remove GitHub runner PostgreSQL firewall rule | Removes the temporary PostgreSQL firewall rule even if migration fails. |
 | Deploy API Container App | Updates the API Container App to use the new API image tag. |
 | Deploy Blazor Container App | Updates the Blazor Container App to use the new Blazor image tag. |
 | Resolve deployed URLs | Reads the public API and Blazor URLs from Azure Container Apps. |
@@ -203,6 +210,7 @@ GitHub repository -> Settings -> Secrets and variables -> Actions -> Secrets
 | `AZURE_CLIENT_ID` | Client ID of the Microsoft Entra application used by GitHub Actions. |
 | `AZURE_TENANT_ID` | Tenant ID where the Microsoft Entra application and service principal exist. |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription used for deployment. |
+| `AZURE_POSTGRES_CONNECTION_STRING` | PostgreSQL connection string used by `dotnet ef database update`. |
 
 ## Required GitHub variables
 
@@ -218,6 +226,7 @@ GitHub repository -> Settings -> Secrets and variables -> Actions -> Variables
 | `AZURE_RESOURCE_GROUP` | Azure resource group name. | `rg-daily-expense-dev` |
 | `API_CONTAINER_APP_NAME` | API Container App name. | `ca-daily-expense-dev-api` |
 | `BLAZOR_CONTAINER_APP_NAME` | Blazor Container App name. | `ca-daily-expense-dev-blazor` |
+| `POSTGRES_SERVER_NAME` | Azure PostgreSQL Flexible Server name. | `pg-daily-expense-dev` |
 
 The workflow has default dev values for these variables, but configuring them in
 GitHub keeps the deployment environment explicit.
@@ -255,7 +264,6 @@ repo:<github-owner>/<github-repo>:ref:refs/heads/master
 
 The current CI/CD pipeline does not yet:
 
-- Run EF Core migrations against Azure PostgreSQL.
 - Run Terraform from GitHub Actions.
 - Use Terraform remote state in CI/CD.
 - Use Azure Key Vault for application secrets.
