@@ -184,6 +184,9 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Restore projects for EF Core migrations
+        run: dotnet restore DailyExpenseManager.sln
+
       - name: Enable Azure CLI dynamic extensions
         run: az config set extension.use_dynamic_install=yes_without_prompt
 

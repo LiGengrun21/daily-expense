@@ -165,6 +165,7 @@ Steps:
 | Push API image | Pushes the API image to ACR using commit SHA and `latest` tags. |
 | Push Blazor image | Pushes the Blazor image to ACR using commit SHA and `latest` tags. |
 | Setup .NET for EF Core migrations | Installs the .NET 10 SDK for the migration command. |
+| Restore projects for EF Core migrations | Restores NuGet packages in the deployment job so EF Core can read project metadata. |
 | Enable Azure CLI dynamic extensions | Allows Azure CLI to install the Container Apps extension if needed. |
 | Get GitHub runner public IP | Reads the public IP address of the GitHub-hosted runner. |
 | Allow GitHub runner to access PostgreSQL | Temporarily adds the runner IP to the Azure PostgreSQL firewall using `--server-name` for the PostgreSQL server and `--name` for the firewall rule. |
