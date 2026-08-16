@@ -4,9 +4,7 @@ public enum PaymentMethod
 {
     Unknown = 0,
     Cash = 1,
-    DebitCard = 2,
-    CreditCard = 3,
-    BankTransfer = 4,
-    DigitalWallet = 5,
+    ABN = 2,
+    Revolut = 3,
     WeChatPay = 6,
 }

@@ -178,10 +178,8 @@
     [
         "Unknown",
         "Cash",
-        "DebitCard",
-        "CreditCard",
-        "BankTransfer",
-        "DigitalWallet"
+        "ABN",
+        "Revolut"
     ];
 
     private IReadOnlyList<CategoryResponse> categories = [];
@@ -400,10 +398,8 @@
     {
         return paymentMethod switch
         {
-            "DebitCard" => "Debit Card",
-            "CreditCard" => "Credit Card",
-            "BankTransfer" => "Bank Transfer",
-            "DigitalWallet" => "Digital Wallet",
+            "ABN" => "ABN",
+            "Revolut" => "Revolut",
             null or "" => "Unknown",
             _ => paymentMethod
         };

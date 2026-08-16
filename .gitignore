@@ -24,6 +24,9 @@ htmlcov/
 coverage/
 TestResults/
 
+# Local notes
+docs/
+
 # .NET
 bin/
 obj/

@@ -23,7 +23,7 @@ public sealed class ExpenseTests
     {
         var expense = new Expense("Coffee", 4.50m, new DateOnly(2026, 8, 7), Guid.NewGuid());
 
-        expense.Update("Lunch", 12.75m, new DateOnly(2026, 8, 8), Guid.NewGuid(), PaymentMethod.CreditCard, null);
+        expense.Update("Lunch", 12.75m, new DateOnly(2026, 8, 8), Guid.NewGuid(), PaymentMethod.Revolut, null);
 
         Assert.Equal("Lunch", expense.Title);
         Assert.NotNull(expense.UpdatedAt);
