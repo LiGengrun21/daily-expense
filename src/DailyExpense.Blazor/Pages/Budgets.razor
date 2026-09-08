@@ -3,6 +3,7 @@
 @using DailyExpense.Contracts.Budgets
 @using DailyExpense.Contracts.Categories
 @inject DailyExpense.Blazor.Services.DailyExpenseApiClient ApiClient
+@inject Microsoft.JSInterop.IJSRuntime JS
 
 <PageTitle>Budgets</PageTitle>
 
@@ -42,8 +43,8 @@
 
     <div class="budget-summary-grid">
         <MetricCard Label="Budget" Value="@CurrencyFormatter.Format(TotalBudget)" />
-        <MetricCard Label="Spent" Value="@CurrencyFormatter.Format(TotalSpent)" />
-        <MetricCard Label="Remaining" Value="@CurrencyFormatter.Format(TotalRemaining)" IsNegative="@(TotalRemaining < 0)" />
+        <MetricCard Label="Spent" Value="@CurrencyFormatter.Format(TotalSpent, "-")" />
+        <MetricCard Label="Remaining" Value="@CurrencyFormatter.Format(TotalRemaining, TotalBudget is null ? "Not set" : "-")" IsNegative="@(TotalRemaining < 0)" />
         <MetricCard Label="Over Budget" Value="@OverBudgetCount.ToString()" />
     </div>
 
@@ -162,6 +163,8 @@
 @code {
     private IReadOnlyList<CategoryResponse> categories = [];
     private IReadOnlyList<MonthlyBudgetResponse> budgets = [];
+    private decimal? monthlySpent;
+    private (int Year, int Month)? loadedBudgetPeriod;
     private BudgetFormModel form = BudgetFormModel.CreateDefault();
     private Guid? editingBudgetId;
     private string? errorMessage;
@@ -175,9 +178,11 @@
         ? "1 budget"
         : $"{budgets.Count} budgets";
 
-    private decimal TotalBudget => budgets.Sum(static budget => budget.Amount);
-    private decimal TotalSpent => budgets.Sum(static budget => budget.SpentAmount);
-    private decimal TotalRemaining => TotalBudget - TotalSpent;
+    private MonthlyBudgetResponse? OverallBudget => budgets.FirstOrDefault(static budget => budget.CategoryId is null);
+    private decimal? TotalBudget => OverallBudget?.Amount
+        ?? (budgets.Count > 0 ? budgets.Sum(static budget => budget.Amount) : (decimal?)null);
+    private decimal? TotalSpent => monthlySpent;
+    private decimal? TotalRemaining => TotalBudget - TotalSpent;
     private int OverBudgetCount => budgets.Count(static budget => budget.IsOverBudget);
 
     private string PreviewName => string.IsNullOrWhiteSpace(form.CategoryIdText)
@@ -208,10 +213,17 @@
     {
         isLoading = true;
         errorMessage = null;
+        monthlySpent = null;
+        loadedBudgetPeriod = null;
 
         try
         {
-            budgets = await ApiClient.GetBudgetsAsync(selectedYear, selectedMonth);
+            var budgetsTask = ApiClient.GetBudgetsAsync(selectedYear, selectedMonth);
+            var summaryTask = ApiClient.GetMonthlySummaryAsync(selectedYear, selectedMonth);
+            await Task.WhenAll(budgetsTask, summaryTask);
+            budgets = await budgetsTask;
+            monthlySpent = (await summaryTask)?.TotalExpenses;
+            loadedBudgetPeriod = (selectedYear, selectedMonth);
         }
         catch (Exception ex)
         {
@@ -254,6 +266,24 @@
         try
         {
             var categoryId = ParseCategoryId(form.CategoryIdText);
+
+            // Use the loaded month immediately; edits targeting another month need its budgets first.
+            var targetBudgets = loadedBudgetPeriod == (form.Year, form.Month)
+                ? budgets
+                : await ApiClient.GetBudgetsAsync(form.Year, form.Month);
+            var otherBudgets = targetBudgets.Where(budget => budget.Id != editingBudgetId).ToList();
+            var total = categoryId is null
+                ? form.Amount
+                : otherBudgets.FirstOrDefault(budget => budget.CategoryId is null)?.Amount;
+            var allocated = otherBudgets.Where(budget => budget.CategoryId is not null).Sum(budget => budget.Amount)
+                + (categoryId is null ? 0m : form.Amount);
+
+            if (total is not null && allocated > total.Value)
+            {
+                errorMessage = $"Category budgets total ({CurrencyFormatter.Format(allocated)}) cannot exceed Total Budget ({CurrencyFormatter.Format(total.Value)}). Reduce category budgets or increase Total Budget.";
+                await JS.InvokeAsync<object?>("alert", new object?[] { errorMessage });
+                return;
+            }
 
             if (editingBudgetId is Guid budgetId)
             {
