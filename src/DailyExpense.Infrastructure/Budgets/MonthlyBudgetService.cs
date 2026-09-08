@@ -246,6 +246,17 @@ public sealed class MonthlyBudgetService(DailyExpenseDbContext dbContext) : IMon
                 : ("Budget.CategoryAlreadyExists", "Category monthly budget already exists for this period.");
         }
 
+        var monthlyBudgets = await dbContext.MonthlyBudgets
+            .AsNoTracking()
+            .Where(budget => budget.Year == year && budget.Month == month)
+            .ToListAsync(cancellationToken);
+        var allocationError = BudgetAllocationValidator.Validate(
+            monthlyBudgets, year, month, amount, categoryId, existingBudgetId);
+        if (allocationError is not null)
+        {
+            return ("Budget.CategoryTotalExceedsTotal", allocationError);
+        }
+
         return null;
     }
 
