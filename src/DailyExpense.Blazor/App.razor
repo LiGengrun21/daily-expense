@@ -1,12 +1,34 @@
-﻿<Router AppAssembly="@typeof(App).Assembly">
-    <Found Context="routeData">
-        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
-        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
-    </Found>
-    <NotFound>
-        <PageTitle>Not found</PageTitle>
-        <LayoutView Layout="@typeof(MainLayout)">
-            <p role="alert">Sorry, there's nothing at this address.</p>
-        </LayoutView>
-    </NotFound>
-</Router>
+@using Microsoft.AspNetCore.Components.Authorization
+@inject SignInConfiguration SignIn
+
+@if (!SignIn.IsConfigured)
+{
+    <main class="sign-in-unavailable">
+        <PageTitle>Sign-in unavailable | Daily Expense</PageTitle>
+        <section class="sign-in-panel">
+            <h1>Daily Expense</h1>
+            <p role="status">Sign-in is not configured yet. Please contact the app owner.</p>
+        </section>
+    </main>
+}
+else
+{
+    <CascadingAuthenticationState>
+        <Router AppAssembly="@typeof(App).Assembly">
+            <Found Context="routeData">
+                <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                    <NotAuthorized><SignInPrompt /></NotAuthorized>
+                    <Authorizing><p role="status">Checking sign-in…</p></Authorizing>
+                </AuthorizeRouteView>
+                <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+            </Found>
+            <NotFound>
+                <PageTitle>Not found</PageTitle>
+                <LayoutView Layout="@typeof(MainLayout)">
+                    <p role="alert">Sorry, there's nothing at this address.</p>
+                    <a href="/">Return home</a>
+                </LayoutView>
+            </NotFound>
+        </Router>
+    </CascadingAuthenticationState>
+}

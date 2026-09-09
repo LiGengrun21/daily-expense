@@ -858,3 +858,35 @@ h1:focus {
         width: 100%;
     }
 }
+
+.sign-in-panel {
+    display: grid;
+    gap: 20px;
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 32px;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #fff;
+}
+.sign-in-panel h1 { font-size: 1.8rem; }
+.sign-in-panel p { color: #475569; }
+.sign-in-panel .btn { justify-self: start; }
+.sign-in-shell,
+.sign-in-unavailable {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+}
+.account-menu {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 16px 24px;
+}
+.account-menu span { overflow-wrap: anywhere; }

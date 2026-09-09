@@ -2,6 +2,7 @@
 @using DailyExpense.Contracts.Statistics
 @using DailyExpense.Contracts.Summaries
 @inject DailyExpense.Blazor.Services.DailyExpenseApiClient ApiClient
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
 
 <PageTitle>Reports</PageTitle>
 

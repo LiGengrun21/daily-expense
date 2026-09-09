@@ -4,6 +4,7 @@
 @using DailyExpense.Contracts.Common
 @using DailyExpense.Contracts.Expenses
 @inject DailyExpense.Blazor.Services.DailyExpenseApiClient ApiClient
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
 
 <PageTitle>Expenses</PageTitle>
 

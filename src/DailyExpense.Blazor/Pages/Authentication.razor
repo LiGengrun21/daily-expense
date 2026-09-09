@@ -1,0 +1,28 @@
+@page "/authentication/{action}"
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+
+<PageTitle>Microsoft sign-in | Daily Expense</PageTitle>
+<section class="sign-in-panel" aria-label="Microsoft sign-in">
+    <RemoteAuthenticatorView Action="@Action">
+        <LoggingIn><p role="status">Redirecting to Microsoft…</p></LoggingIn>
+        <CompletingLoggingIn><p role="status">Completing sign-in…</p></CompletingLoggingIn>
+        <LogInFailed>
+            <h1>Sign-in failed</h1>
+            <p role="alert">We couldn't sign you in. Please try again with your authorized Microsoft account.</p>
+            <a href="/">Return to sign in</a>
+        </LogInFailed>
+        <LogOutFailed>
+            <h1>Sign-out failed</h1>
+            <p role="alert">We couldn't complete sign-out. Return to the app and try again.</p>
+            <a href="/">Return to the app</a>
+        </LogOutFailed>
+        <LogOutSucceeded>
+            <h1>Signed out</h1>
+            <a href="/">Return to sign in</a>
+        </LogOutSucceeded>
+    </RemoteAuthenticatorView>
+</section>
+
+@code {
+    [Parameter] public string? Action { get; set; }
+}

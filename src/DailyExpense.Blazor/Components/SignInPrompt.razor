@@ -1,0 +1,13 @@
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inject NavigationManager Navigation
+
+<section class="sign-in-panel" aria-labelledby="sign-in-title">
+    <PageTitle>Sign in | Daily Expense</PageTitle>
+    <h1 id="sign-in-title">Daily Expense</h1>
+    <p>Sign in with your Microsoft account to manage your expenses.</p>
+    <button class="btn btn-primary" type="button" @onclick="SignIn">Sign in with Microsoft</button>
+</section>
+
+@code {
+    private void SignIn() => Navigation.NavigateToLogin("authentication/login");
+}

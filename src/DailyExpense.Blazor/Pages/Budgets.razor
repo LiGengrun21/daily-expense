@@ -3,6 +3,7 @@
 @using DailyExpense.Contracts.Budgets
 @using DailyExpense.Contracts.Categories
 @inject DailyExpense.Blazor.Services.DailyExpenseApiClient ApiClient
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject Microsoft.JSInterop.IJSRuntime JS
 
 <PageTitle>Budgets</PageTitle>

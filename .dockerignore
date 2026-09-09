@@ -5,6 +5,9 @@
 **/.vscode
 **/bin
 **/obj
+**/appsettings.Local.json
+**/.env
+**/.env.*
 **/TestResults
 **/node_modules
 Dockerfile

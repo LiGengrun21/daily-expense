@@ -1,13 +1,26 @@
 @inherits LayoutComponentBase
 
+@using Microsoft.AspNetCore.Components.Authorization
+
+<AuthorizeView>
+    <Authorized>
 <div class="page">
     <aside class="sidebar" aria-label="Primary navigation">
         <NavMenu />
     </aside>
 
     <main class="main-shell">
+        <LoginDisplay />
         <article class="content">
             @Body
         </article>
     </main>
 </div>
+    </Authorized>
+    <NotAuthorized>
+        <main class="sign-in-shell">@Body</main>
+    </NotAuthorized>
+    <Authorizing>
+        <main class="sign-in-shell"><p role="status">Checking sign-in…</p></main>
+    </Authorizing>
+</AuthorizeView>
